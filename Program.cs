@@ -1,61 +1,65 @@
 ﻿using System;
 using System.IO;
-using System.Linq;
-using System.Reflection;
 using System.Threading.Tasks;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
-using StalkBot;
+using Newtonsoft.Json;
 
-namespace TTSBot
+namespace StalkBot
 {
     internal class Program
     {
         public static DiscordClient Client;
         private CommandsNextModule _commands;
-        private string prefix;
-        public static bool TtsEnabled;
-        public static bool CamEnabled;
-        public static bool SsEnabled;
-        
-        
+        public static Config Config;
+        public static bool IsPlaying;
+
         public static void Main(string[] args)
             => new Program().MainAsync().GetAwaiter().GetResult();
 
         public async Task MainAsync()
         {
-            string token;
             try
             {
-                token = File.ReadAllLines("token.txt").FirstOrDefault();
+                Config = JsonConvert.DeserializeObject<Config>(File.ReadAllText("config.json"));
             }
             catch (Exception e)
             {
                 Console.WriteLine(e.Message);
-                Console.ReadLine();
-                return;
+                throw;
             }
 
-            TtsEnabled = true;
-            CamEnabled = true;
-            SsEnabled = true;
-            
-            try
-            {
-                prefix = File.ReadAllLines("prefix.txt").First();
-            }
-            catch (Exception e)
-            {
-                Console.WriteLine(e.Message + " Using default prefix mei!");
-                prefix = "mei!";
-            }
-
-            Client = new DiscordClient(new DiscordConfiguration {Token = token, TokenType = TokenType.Bot});
-            _commands = Client.UseCommandsNext(new CommandsNextConfiguration {StringPrefix = prefix});
+            IsPlaying = false;
+            Client = new DiscordClient(new DiscordConfiguration {Token = Config.Token, TokenType = TokenType.Bot});
+            _commands = Client.UseCommandsNext(new CommandsNextConfiguration
+                {StringPrefix = Config.Prefix, CaseSensitive = false});
             _commands.RegisterCommands<Commands>();
             await Client.ConnectAsync();
-            Console.WriteLine($"Connected!\nUse {prefix}toggle to enable/disable all functionality");
+            Console.WriteLine("Connected!");
             await Task.Delay(-1);
         }
+    }
+
+    public class Config
+    {
+        public override string ToString()
+        {
+            return
+                $"Prefix: {Prefix}\nCam Timer: {CamTimer.ToString()}\nBlur Amount: {BlurAmount.ToString()}\nTTS: {TtsEnabled.ToString()}\nWebcam: {CamEnabled.ToString()}\nScreenshots: {SsEnabled.ToString()}";
+        }
+
+        public void SaveCfg()
+        {
+            File.WriteAllText("config.json", JsonConvert.SerializeObject(Program.Config, Formatting.Indented));
+        }
+        
+        public string Token { get; set; }
+        public string Prefix { get; set; }
+        public int CamTimer { get; set; }
+        public int BlurAmount { get; set; }
+        public bool TtsEnabled { get; set; }
+        public bool CamEnabled { get; set; }
+        public bool SsEnabled { get; set; }
+        public bool PlayEnabled { get; set; }
     }
 }
