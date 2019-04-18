@@ -25,7 +25,7 @@ namespace StalkBot
         [Command("folder"), Cooldown(1, 5, CooldownBucketType.Global)]
         public async Task Folder(CommandContext ctx)
         {
-            if (Program.Config.FolderPath != "")
+            if (Program.Config.FolderPath != "" && !Program.Blacklist.Contains(ctx.User))
             {
                 var rand = new Random();
                 var fileToSend = "";
@@ -54,7 +54,7 @@ namespace StalkBot
         [Command("webcam"), Aliases("wc", "cam"), Cooldown(1, 5, CooldownBucketType.Global)]
         public async Task WebCam(CommandContext ctx)
         {
-            if (Program.Config.CamEnabled)
+            if (Program.Config.CamEnabled && !Program.Blacklist.Contains(ctx.User))
             {
                 Log($"Webcam requested by {ctx.User.Username}#{ctx.User.Discriminator}");
                 // ReSharper disable once CollectionNeverUpdated.Local
@@ -98,7 +98,7 @@ namespace StalkBot
         [Command("play"), Cooldown(1, 5, CooldownBucketType.Global)]
         public async Task Play(CommandContext ctx, string url = "")
         {
-            if (Program.Config.PlayEnabled)
+            if (Program.Config.PlayEnabled && !Program.Blacklist.Contains(ctx.User))
             {
                 if (Program.IsPlaying)
                 {
@@ -188,7 +188,7 @@ namespace StalkBot
         [Command("say"), Aliases("tts"), Cooldown(1, 5, CooldownBucketType.Global)]
         public async Task Say(CommandContext ctx, [RemainingText] string input)
         {
-            if (Program.Config.TtsEnabled)
+            if (Program.Config.TtsEnabled && !Program.Blacklist.Contains(ctx.User))
             {
                 if (Program.IsPlaying)
                 {
@@ -228,7 +228,7 @@ namespace StalkBot
         [Command("screenshot"), Aliases("ss", "sc"), Cooldown(1, 5, CooldownBucketType.Global)]
         public async Task Screen(CommandContext ctx)
         {
-            if (Program.Config.SsEnabled)
+            if (Program.Config.SsEnabled && !Program.Blacklist.Contains(ctx.User))
             {
                 try
                 {
@@ -292,6 +292,11 @@ namespace StalkBot
                 switch (option.ToLower())
                 {
                     case "add":
+                        if (ctx.User == user)
+                        {
+                            await ctx.RespondAsync("Bad Idea.");
+                            return;
+                        }
                         Program.Blacklist.Add(user);
                         break;
                     case "remove":
