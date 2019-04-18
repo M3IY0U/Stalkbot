@@ -45,7 +45,13 @@ namespace StalkBot
         public override string ToString()
         {
             return
-                $"Prefix: {Prefix}\nCam Timer: {CamTimer.ToString()}\nBlur Amount: {BlurAmount.ToString()}\nTTS: {TtsEnabled.ToString()}\nWebcam: {CamEnabled.ToString()}\nScreenshots: {SsEnabled.ToString()}";
+                $"Prefix: {Prefix}\n" +
+                $"Cam Timer: {CamTimer.ToString()}\n" +
+                $"Blur Amount: {BlurAmount.ToString()}\n" +
+                $"TTS: {TtsEnabled.ToString()}\n" +
+                $"Webcam: {CamEnabled.ToString()}\n" +
+                $"Screenshots: {SsEnabled.ToString()}" +
+                $"PlaySounds: {PlayEnabled.ToString()}";
         }
 
         public void SaveCfg()

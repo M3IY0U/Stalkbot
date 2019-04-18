@@ -10,3 +10,17 @@ build_script:
   - git submodule
   - nuget restore
   - dotnet build StalkBot.sln -c Release
+
+artifacts:
+  - path: bin\Release
+
+deploy:
+  release: StalkBot-v$(appveyor_build_version)
+  provider: GitHub
+  auth_token:
+    secure: fM8VHytaoRr2oMRgTGkWwEcjN6VbQ9LuU2ztA4iz9d4Rxqxdwpuid8qX+iNHbC6m
+  draft: false
+  prerelease: false
+  on:
+    branch: master
+    APPVEYOR_REPO_TAG: false
