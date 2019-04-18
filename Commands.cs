@@ -1,10 +1,13 @@
 using System;
+using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Media;
 using System.Net;
 using System.Speech.Synthesis;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AForge.Video.DirectShow;
@@ -19,8 +22,37 @@ namespace StalkBot
 {
     public class Commands
     {
+        [Command("folder"), Cooldown(1, 5, CooldownBucketType.Global)]
+        public async Task Folder(CommandContext ctx)
+        {
+            if (Program.Config.FolderPath != "")
+            {
+                var rand = new Random();
+                var fileToSend = "";
+                try
+                {
+                    var files = Directory.GetFiles(Program.Config.FolderPath);
+                    fileToSend = files[rand.Next(files.Length)];
+                    await ctx.Channel.SendFileAsync(fileToSend);
+                    Log($"Folder requested by {ctx.User.Username}#{ctx.User.Discriminator}, sent file \"{fileToSend.Substring(fileToSend.LastIndexOf(Path.DirectorySeparatorChar)+1)}\".");
+                }
+                catch (Exception e)
+                {
+                    await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
+                    Console.ForegroundColor = ConsoleColor.Red;
+                    Console.WriteLine($"Error sending file {fileToSend.Substring(fileToSend.LastIndexOf(Path.DirectorySeparatorChar)+1)}: " + e.Message);
+                    Console.ResetColor();
+                }
+            }
+            else
+            {
+                Log($"Folderpath requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was not set.");
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
+            }
+        }
+
         [Command("webcam"), Aliases("wc", "cam"), Cooldown(1, 5, CooldownBucketType.Global)]
-        public async Task Webcam(CommandContext ctx)
+        public async Task WebCam(CommandContext ctx)
         {
             if (Program.Config.CamEnabled)
             {
@@ -58,11 +90,12 @@ namespace StalkBot
             }
             else
             {
+                Log($"Webcam requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was toggled off.");
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
 
-        [Command("play")]
+        [Command("play"), Cooldown(1, 5, CooldownBucketType.Global)]
         public async Task Play(CommandContext ctx, string url = "")
         {
             if (Program.Config.PlayEnabled)
@@ -72,6 +105,9 @@ namespace StalkBot
                     await ctx.RespondAsync("Already playing something");
                     return;
                 }
+
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("♨"));
+
                 try
                 {
                     if (url == "" && ctx.Message.Attachments.Count == 0)
@@ -84,26 +120,56 @@ namespace StalkBot
 
                     Log(
                         $"PlaySound requested by {ctx.User.Username}#{ctx.User.Discriminator} | URL: {ctx.Message.Attachments.FirstOrDefault()?.Url ?? url}");
+
+                    var downloadUrl = ctx.Message.Attachments.Count == 0 ? url : ctx.Message.Attachments.First().Url;
+
+                    if (string.IsNullOrWhiteSpace(downloadUrl))
+                    {
+                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
+                        return;
+                    }
+
+                    var fileType = downloadUrl.Substring(downloadUrl.LastIndexOf('.'));
+
+                    var rx = new Regex(@"^\.[\w\d]+$");
+                    if (!rx.IsMatch(fileType))
+                    {
+                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
+                        Console.ForegroundColor = ConsoleColor.DarkYellow;
+                        Console.WriteLine(
+                            $"{ctx.User.Username}#{ctx.User.Discriminator} requested a bad/malicious url or file!");
+                        Console.ResetColor();
+                        return;
+                    }
+
                     using (var client = new WebClient())
                     {
-                        if (ctx.Message.Attachments.Count != 0)
-                        {
-                            client.DownloadFile(ctx.Message.Attachments.First().Url, "temp.wav");
-                        }
-                        else if (url != "")
-                        {
-                            client.DownloadFile(url, "temp.wav");
-                        }
+                        client.DownloadFile(downloadUrl, "temp" + fileType);
+                        client.Dispose();
                     }
+
                     try
                     {
-                        var player = new SoundPlayer("temp.wav");
-                        player.Play();
+                        await ConvertAudio("temp" + fileType);
                     }
-                    catch (Exception)
+                    catch (Exception e)
                     {
-                        await ctx.RespondAsync("Only .wav files are supported at the moment, sorry!");
+                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
+                        Console.WriteLine("Error converting audio: " + e.Message);
+                        return;
                     }
+
+                    await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("♨"));
+                    using (var player = new SoundPlayer("temp.wav"))
+                    {
+                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("▶"));
+                        player.PlaySync();
+                        player.Dispose();
+                    }
+
+                    await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("▶"));
+                    await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+                    File.Delete("temp" + fileType);
                 }
                 catch (Exception e)
                 {
@@ -114,6 +180,7 @@ namespace StalkBot
             }
             else
             {
+                Log($"PlaySound requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was toggled off.");
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
@@ -128,6 +195,7 @@ namespace StalkBot
                     await ctx.RespondAsync("Already playing something");
                     return;
                 }
+
                 try
                 {
                     Log($"TTS requested by {ctx.User.Username}#{ctx.User.Discriminator}. Text: {input}");
@@ -152,6 +220,7 @@ namespace StalkBot
             }
             else
             {
+                Log($"TTS requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was toggled off.");
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
@@ -181,14 +250,13 @@ namespace StalkBot
                         {
                             using (var image = Image.Load("ss.png"))
                             {
-                                var w = image.Width;
-                                var h = image.Height;
-                                image.Mutate(
-                                    x => x.Resize(h / Program.Config.BlurAmount, h / Program.Config.BlurAmount));
-                                image.Mutate(x => x.Resize(w, h));
+                                image.Mutate(x => x.GaussianBlur((float) Program.Config.BlurAmount));
                                 image.Save("ss.png");
+                                image.Dispose();
                             }
                         }
+
+                        bitmap.Dispose();
                     }
 
                     await ctx.Channel.SendFileAsync("ss.png");
@@ -204,16 +272,58 @@ namespace StalkBot
             }
             else
             {
+                Log($"Screenshot requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was toggled off.");
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
-
-        private static void Log(string message)
+        
+        [Command("cfg")]
+        public async Task PrintCfg(CommandContext ctx)
         {
-            Console.ForegroundColor = ConsoleColor.Green;
-            Console.WriteLine(
-                $"[{DateTime.Now.ToLongTimeString()}] {message}");
-            Console.ResetColor();
+            Log($"Config requested by {ctx.User.Username}#{ctx.User.Discriminator}.");
+            await ctx.RespondAsync($"```{Program.Config}```");
+        }
+
+        [Command("blacklist"), Aliases("hurensohn"), RequireOwner]
+        public async Task BlackList(CommandContext ctx, string option, DiscordUser user = null)
+        {
+            try
+            {
+                switch (option.ToLower())
+                {
+                    case "add":
+                        Program.Blacklist.Add(user);
+                        break;
+                    case "remove":
+                        Program.Blacklist.Remove(user);
+                        break;
+                    case "clear":
+                        Program.Blacklist.Clear();
+                        break;
+                    case "print":
+                        if (Program.Blacklist.Count == 0)
+                        {
+                            await ctx.RespondAsync("Blacklist is empty.");
+                        }
+                        else
+                        {
+                            await ctx.RespondAsync($"```{string.Join("\n", Program.Blacklist)}```");
+                        }
+
+                        break;
+                    default:
+                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
+                        return;
+                }
+
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+            }
+            catch (Exception e)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("Error modifying blacklist: " + e.Message);
+                Console.ResetColor();
+            }
         }
 
         [Command("toggle"), RequireOwner]
@@ -222,24 +332,31 @@ namespace StalkBot
             switch (input.ToLower())
             {
                 case "off":
-                    Program.Config.SsEnabled = !Program.Config.SsEnabled;
-                    Program.Config.CamEnabled = !Program.Config.CamEnabled;
-                    Program.Config.TtsEnabled = !Program.Config.TtsEnabled;
+                    Program.Config.SsEnabled = false;
+                    Program.Config.CamEnabled = false;
+                    Program.Config.TtsEnabled = false;
+                    Program.Config.PlayEnabled = false;
+                    Log("Turned off everything.");
                     break;
                 case "cam":
                     Program.Config.CamEnabled = !Program.Config.CamEnabled;
+                    Log($"Toggled webcam to: {Program.Config.CamEnabled}.");
                     break;
                 case "tts":
                     Program.Config.TtsEnabled = !Program.Config.TtsEnabled;
+                    Log($"Toggled tts to: {Program.Config.TtsEnabled}.");
                     break;
                 case "ss":
                     Program.Config.SsEnabled = !Program.Config.SsEnabled;
+                    Log($"Toggled screenshot to: {Program.Config.SsEnabled}.");
                     break;
                 case "screenshot":
                     Program.Config.SsEnabled = !Program.Config.SsEnabled;
+                    Log($"Toggled screenshot to: {Program.Config.SsEnabled}.");
                     break;
                 case "play":
                     Program.Config.PlayEnabled = !Program.Config.PlayEnabled;
+                    Log($"Toggled playsounds to: {Program.Config.PlayEnabled}.");
                     break;
                 default:
                     await ctx.RespondAsync("Available toggles: `off`, `cam`, `tts`, `screenshot`, `play`.");
@@ -247,15 +364,26 @@ namespace StalkBot
             }
 
             await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
-            Program.Config.SaveCfg();
+            Config.SaveCfg();
         }
 
         [Command("blur"), RequireOwner]
-        public async Task SetBlur(CommandContext ctx, int amount)
+        public async Task SetBlur(CommandContext ctx, double amount)
         {
+            if (amount > 5 || amount < 0)
+            {
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
+                Console.ForegroundColor = ConsoleColor.DarkYellow;
+                Console.WriteLine(
+                    $"[{DateTime.Now.ToLongTimeString()}] Tried setting blur to something > 5 or < 1.");
+                Console.ResetColor();
+                return;
+            }
+
             Program.Config.BlurAmount = amount;
             await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
-            Program.Config.SaveCfg();
+            Log($"Blur changed to {amount.ToString(CultureInfo.InvariantCulture)}.");
+            Config.SaveCfg();
         }
 
         [Command("timer"), RequireOwner]
@@ -263,20 +391,33 @@ namespace StalkBot
         {
             Program.Config.CamTimer = amount;
             await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
-            Program.Config.SaveCfg();
+            Log($"Cam timer changed to {amount.ToString()}.");
+            Config.SaveCfg();
         }
 
-        [Command("cfg")]
-        public async Task PrintCfg(CommandContext ctx)
+        private static Task ConvertAudio(string filename)
         {
-            await ctx.RespondAsync($"```{Program.Config}```");
+            using (var exeProcess = Process.Start(new ProcessStartInfo
+            {
+                FileName = "ffmpeg.exe",
+                Arguments = $"-y -i {filename} -af volume=-25dB temp.wav",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            }))
+            {
+                exeProcess?.WaitForExit();
+            }
+
+            return Task.CompletedTask;
         }
 
-        [Command("savecfg"), RequireOwner]
-        public async Task SaveCfg(CommandContext ctx)
+        private static void Log(string message)
         {
-            Program.Config.SaveCfg();
-            await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine(
+                $"[{DateTime.Now.ToLongTimeString()}] {message}");
+            Console.ResetColor();
         }
     }
 }

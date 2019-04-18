@@ -1,8 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
 using DSharpPlus;
 using DSharpPlus.CommandsNext;
+using DSharpPlus.Entities;
 using Newtonsoft.Json;
 
 namespace StalkBot
@@ -13,6 +16,7 @@ namespace StalkBot
         private CommandsNextModule _commands;
         public static Config Config;
         public static bool IsPlaying;
+        public static List<DiscordUser> Blacklist;
 
         public static void Main(string[] args)
             => new Program().MainAsync().GetAwaiter().GetResult();
@@ -25,10 +29,21 @@ namespace StalkBot
             }
             catch (Exception e)
             {
+                Console.ForegroundColor = ConsoleColor.Red;
                 Console.WriteLine(e.Message);
-                throw;
+                Console.ReadLine();
+                Environment.Exit(0);
             }
 
+            if (!File.Exists("ffmpeg.exe"))
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("ffmpeg.exe not found in directory, please download it from https://ffmpeg.zeranoe.com/builds/");
+                Console.ReadLine();
+                Environment.Exit(0);
+            }
+
+            Blacklist = new List<DiscordUser>();
             IsPlaying = false;
             Client = new DiscordClient(new DiscordConfiguration {Token = Config.Token, TokenType = TokenType.Bot});
             _commands = Client.UseCommandsNext(new CommandsNextConfiguration
@@ -47,14 +62,15 @@ namespace StalkBot
             return
                 $"Prefix: {Prefix}\n" +
                 $"Cam Timer: {CamTimer.ToString()}\n" +
-                $"Blur Amount: {BlurAmount.ToString()}\n" +
+                $"Blur Amount: {BlurAmount.ToString(CultureInfo.InvariantCulture)}\n" +
                 $"TTS: {TtsEnabled.ToString()}\n" +
                 $"Webcam: {CamEnabled.ToString()}\n" +
-                $"Screenshots: {SsEnabled.ToString()}" +
-                $"PlaySounds: {PlayEnabled.ToString()}";
+                $"Screenshots: {SsEnabled.ToString()}\n" +
+                $"PlaySounds: {PlayEnabled.ToString()}\n" +
+                $"Folder: {FolderPath}";
         }
 
-        public void SaveCfg()
+        public static void SaveCfg()
         {
             File.WriteAllText("config.json", JsonConvert.SerializeObject(Program.Config, Formatting.Indented));
         }
@@ -62,10 +78,11 @@ namespace StalkBot
         public string Token { get; set; }
         public string Prefix { get; set; }
         public int CamTimer { get; set; }
-        public int BlurAmount { get; set; }
+        public double BlurAmount { get; set; }
         public bool TtsEnabled { get; set; }
         public bool CamEnabled { get; set; }
         public bool SsEnabled { get; set; }
         public bool PlayEnabled { get; set; }
+        public string FolderPath { get; set; }
     }
 }
