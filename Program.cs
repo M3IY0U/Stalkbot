@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO;
 using System.Threading.Tasks;
@@ -38,7 +39,8 @@ namespace StalkBot
             if (!File.Exists("ffmpeg.exe"))
             {
                 Console.ForegroundColor = ConsoleColor.Red;
-                Console.WriteLine("ffmpeg.exe not found in directory, please download it from https://ffmpeg.zeranoe.com/builds/");
+                Console.WriteLine(
+                    "ffmpeg.exe not found in directory, please download it from https://ffmpeg.zeranoe.com/builds/");
                 Console.ReadLine();
                 Environment.Exit(0);
             }
@@ -55,6 +57,7 @@ namespace StalkBot
         }
     }
 
+    [SuppressMessage("ReSharper", "UnusedAutoPropertyAccessor.Global")]
     public class Config
     {
         public override string ToString()
@@ -67,6 +70,9 @@ namespace StalkBot
                 $"Webcam: {CamEnabled.ToString()}\n" +
                 $"Screenshots: {SsEnabled.ToString()}\n" +
                 $"PlaySounds: {PlayEnabled.ToString()}\n" +
+                $"Cursor: {CursorEnabled}\n" +
+                $"Processes: {ProcessesEnabled}\n" +
+                $"Timeout: {Timeout.ToString(CultureInfo.InvariantCulture)}" +
                 $"Folder: {FolderPath}";
         }
 
@@ -74,7 +80,7 @@ namespace StalkBot
         {
             File.WriteAllText("config.json", JsonConvert.SerializeObject(Program.Config, Formatting.Indented));
         }
-        
+
         public string Token { get; set; }
         public string Prefix { get; set; }
         public int CamTimer { get; set; }
@@ -83,6 +89,9 @@ namespace StalkBot
         public bool CamEnabled { get; set; }
         public bool SsEnabled { get; set; }
         public bool PlayEnabled { get; set; }
+        public bool CursorEnabled { get; set; }
+        public bool ProcessesEnabled { get; set; }
+        public double Timeout { get; set; }
         public string FolderPath { get; set; }
     }
 }

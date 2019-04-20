@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
@@ -17,16 +18,100 @@ using DSharpPlus.Entities;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Image = SixLabors.ImageSharp.Image;
+using Timer = System.Timers.Timer;
 
 namespace StalkBot
 {
     public class Commands
     {
-        [Command("folder"), Cooldown(1, 5, CooldownBucketType.Global)]
+        [Command("processes"), Aliases("proc"), Description("Shows 15 processes sorted by Memory Usage.")]
+        public async Task ActiveWindow(CommandContext ctx)
+        {
+            if (Program.Config.ProcessesEnabled)
+            {
+                Log($"Processes requested by {ctx.User.Username}#{ctx.User.Discriminator}");
+                var procs = Process.GetProcesses().Where(x => x.SessionId == Process.GetCurrentProcess().SessionId)
+                    .OrderByDescending(x => x.PrivateMemorySize64)
+                    .ToList();
+                var table = new ConsoleTable("Name", "Memory", "Uptime");
+                foreach (var process in procs.Take(15))
+                {
+                    try
+                    {
+                        table.AddRow($"{process.ProcessName}", $"{process.PrivateMemorySize64 / 1000000}MB",
+                            $"{DateTime.Now - process.StartTime:h'h 'm'm 's's'}");
+                    }
+                    catch (Exception)
+                    {
+                        table.AddRow($"{process.ProcessName}", $"{process.PrivateMemorySize64 / 1000000}MB",
+                            "Not available!");
+                    }
+                }
+
+                var response = table.Configure(x => x.NumberAlignment = Alignment.Right).ToMinimalString();
+                await ctx.RespondAsync($"```{response}```");
+            }
+            else
+            {
+                Log($"Processes requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it not enabled.");
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
+            }
+        }
+
+        [Command("cursor"), Description("Either puts the cursor to random locations for a few seconds or to a specified x/y position.")]
+        [SuppressMessage("ReSharper", "PossibleNullReferenceException")]
+        public async Task Cursor(CommandContext ctx, int x = 0, int y = 0)
+        {
+            if (Program.Config.CursorEnabled)
+            {
+                Log($"Cursor requested by {ctx.User.Username}#{ctx.User.Discriminator}");
+                var height = SystemInformation.VirtualScreen.Height;
+                var width = SystemInformation.VirtualScreen.Width;
+                var rand = new Random();
+                if (x < 0 || x > height)
+                {
+                    x = 0;
+                }
+
+                if (x < 0 || x > width)
+                {
+                    y = 0;
+                }
+                
+                PlayAlert("cursor.wav");
+                var pc = new PointConverter();
+                Point pt;
+
+                if (x == 0 && y == 0)
+                {
+                    for (var i = 0; i < 25; i++)
+                    {
+                        pt = (Point) pc.ConvertFromString($"{rand.Next(width)}, {rand.Next(height)}");
+                        System.Windows.Forms.Cursor.Position = pt;
+                        await Task.Delay(50);
+                    }
+
+                    await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+                    return;
+                }
+
+                pt = (Point) pc.ConvertFromString($"{x}, {y}");
+                System.Windows.Forms.Cursor.Position = pt;
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+            }
+            else
+            {
+                Log($"Cursor requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it not enabled.");
+                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
+            }
+        }
+
+        [Command("folder"), Cooldown(1, 5, CooldownBucketType.Global), Description("Sends a file from a folder, if set.")]
         public async Task Folder(CommandContext ctx)
         {
             if (Program.Config.FolderPath != "" && !Program.Blacklist.Contains(ctx.User))
             {
+                PlayAlert("folder.wav");
                 var rand = new Random();
                 var fileToSend = "";
                 try
@@ -34,13 +119,16 @@ namespace StalkBot
                     var files = Directory.GetFiles(Program.Config.FolderPath);
                     fileToSend = files[rand.Next(files.Length)];
                     await ctx.Channel.SendFileAsync(fileToSend);
-                    Log($"Folder requested by {ctx.User.Username}#{ctx.User.Discriminator}, sent file \"{fileToSend.Substring(fileToSend.LastIndexOf(Path.DirectorySeparatorChar)+1)}\".");
+                    Log(
+                        $"Folder requested by {ctx.User.Username}#{ctx.User.Discriminator}, sent file \"{fileToSend.Substring(fileToSend.LastIndexOf(Path.DirectorySeparatorChar) + 1)}\".");
                 }
                 catch (Exception e)
                 {
                     await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("❌"));
                     Console.ForegroundColor = ConsoleColor.Red;
-                    Console.WriteLine($"Error sending file {fileToSend.Substring(fileToSend.LastIndexOf(Path.DirectorySeparatorChar)+1)}: " + e.Message);
+                    Console.WriteLine(
+                        $"Error sending file {fileToSend.Substring(fileToSend.LastIndexOf(Path.DirectorySeparatorChar) + 1)}: " +
+                        e.Message);
                     Console.ResetColor();
                 }
             }
@@ -51,7 +139,7 @@ namespace StalkBot
             }
         }
 
-        [Command("webcam"), Aliases("wc", "cam"), Cooldown(1, 5, CooldownBucketType.Global)]
+        [Command("webcam"), Aliases("wc", "cam"), Cooldown(1, 5, CooldownBucketType.Global), Description("Captures the webcam.")]
         public async Task WebCam(CommandContext ctx)
         {
             if (Program.Config.CamEnabled && !Program.Blacklist.Contains(ctx.User))
@@ -62,8 +150,7 @@ namespace StalkBot
                 {
                     var videoDevices = new FilterInfoCollection(FilterCategory.VideoInputDevice);
                     var cam = new VideoCaptureDevice(videoDevices[0].MonikerString);
-                    var player = new SoundPlayer("webcam.wav");
-                    player.Play();
+                    PlayAlert("webcam.wav");
                     cam.Start();
                     await Task.Delay(Program.Config.CamTimer);
                     await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("📸"));
@@ -95,7 +182,7 @@ namespace StalkBot
             }
         }
 
-        [Command("play"), Cooldown(1, 5, CooldownBucketType.Global)]
+        [Command("play"), Cooldown(1, 5, CooldownBucketType.Global), Description("Plays the attached file or url to a file.")]
         public async Task Play(CommandContext ctx, string url = "")
         {
             if (Program.Config.PlayEnabled && !Program.Blacklist.Contains(ctx.User))
@@ -163,12 +250,25 @@ namespace StalkBot
                     using (var player = new SoundPlayer("temp.wav"))
                     {
                         await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("▶"));
-                        player.PlaySync();
-                        player.Dispose();
+                        if (Program.Config.Timeout > 0.0)
+                        {
+                            var timer = new Timer
+                            {
+                                Enabled = true,
+                                Interval = Program.Config.Timeout,
+                                AutoReset = false
+                            };
+                            timer.Start();
+                            timer.Elapsed += async (sender, args) =>
+                            {
+                                // ReSharper disable once AccessToDisposedClosure
+                                player.Stop();
+                                await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("▶"));
+                                await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🛑"));
+                            };
+                        }
+                        player.Play();
                     }
-
-                    await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("▶"));
-                    await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
                     File.Delete("temp" + fileType);
                 }
                 catch (Exception e)
@@ -185,7 +285,7 @@ namespace StalkBot
             }
         }
 
-        [Command("say"), Aliases("tts"), Cooldown(1, 5, CooldownBucketType.Global)]
+        [Command("say"), Aliases("tts"), Cooldown(1, 5, CooldownBucketType.Global), Description("Tells the user something via text-to-speech.")]
         public async Task Say(CommandContext ctx, [RemainingText] string input)
         {
             if (Program.Config.TtsEnabled && !Program.Blacklist.Contains(ctx.User))
@@ -202,12 +302,21 @@ namespace StalkBot
                     var synth = new SpeechSynthesizer();
                     await ctx.Message.CreateReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
                     var p = new Prompt(input);
+                    var timer = new Timer
+                    {
+                        Enabled = true,
+                        Interval = Program.Config.Timeout,
+                        AutoReset = false
+                    };
+                    timer.Start();
+                    timer.Elapsed += (sender, args) => { synth.Dispose(); };
                     synth.SpeakAsync(p);
                     Program.IsPlaying = true;
                     synth.SpeakCompleted += async (sender, args) =>
                     {
                         await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
                         await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+                        synth.Dispose();
                         Program.IsPlaying = false;
                     };
                 }
@@ -225,7 +334,7 @@ namespace StalkBot
             }
         }
 
-        [Command("screenshot"), Aliases("ss", "sc"), Cooldown(1, 5, CooldownBucketType.Global)]
+        [Command("screenshot"), Aliases("ss", "sc"), Cooldown(1, 5, CooldownBucketType.Global), Description("Captures a screenshot.")]
         public async Task Screen(CommandContext ctx)
         {
             if (Program.Config.SsEnabled && !Program.Blacklist.Contains(ctx.User))
@@ -234,8 +343,7 @@ namespace StalkBot
                 {
                     Log($"Screenshot requested by {ctx.User.Username}#{ctx.User.Discriminator}");
                     var vScreen = SystemInformation.VirtualScreen;
-                    var player = new SoundPlayer("screenshot.wav");
-                    player.Play();
+                    PlayAlert("screenshot.wav");
                     using (var bitmap = new Bitmap(vScreen.Width, vScreen.Height))
                     {
                         using (var g = Graphics.FromImage(bitmap))
@@ -260,7 +368,6 @@ namespace StalkBot
                     }
 
                     await ctx.Channel.SendFileAsync("ss.png");
-                    player.Dispose();
                     File.Delete("ss.png");
                 }
                 catch (Exception e)
@@ -276,15 +383,15 @@ namespace StalkBot
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
-        
-        [Command("cfg")]
+
+        [Command("cfg"), Description("Shows the bots config.")]
         public async Task PrintCfg(CommandContext ctx)
         {
             Log($"Config requested by {ctx.User.Username}#{ctx.User.Discriminator}.");
             await ctx.RespondAsync($"```{Program.Config}```");
         }
 
-        [Command("blacklist"), Aliases("hurensohn"), RequireOwner]
+        [Command("blacklist"), Aliases("hurensohn"), RequireOwner, Description("Manage your user blacklist.")]
         public async Task BlackList(CommandContext ctx, string option, DiscordUser user = null)
         {
             try
@@ -297,6 +404,7 @@ namespace StalkBot
                             await ctx.RespondAsync("Bad Idea.");
                             return;
                         }
+
                         Program.Blacklist.Add(user);
                         break;
                     case "remove":
@@ -331,7 +439,7 @@ namespace StalkBot
             }
         }
 
-        [Command("toggle"), RequireOwner]
+        [Command("toggle"), RequireOwner, Description("Toggle specific settings on or off.")]
         public async Task Toggle(CommandContext ctx, string input = "")
         {
             switch (input.ToLower())
@@ -341,6 +449,8 @@ namespace StalkBot
                     Program.Config.CamEnabled = false;
                     Program.Config.TtsEnabled = false;
                     Program.Config.PlayEnabled = false;
+                    Program.Config.CursorEnabled = false;
+                    Program.Config.ProcessesEnabled = false;
                     Log("Turned off everything.");
                     break;
                 case "cam":
@@ -363,8 +473,16 @@ namespace StalkBot
                     Program.Config.PlayEnabled = !Program.Config.PlayEnabled;
                     Log($"Toggled playsounds to: {Program.Config.PlayEnabled}.");
                     break;
+                case "cursor":
+                    Program.Config.CursorEnabled = !Program.Config.CursorEnabled;
+                    Log($"Toggled cursorcontrol to: {Program.Config.CursorEnabled}.");
+                    break;
+                case "proc":
+                    Program.Config.ProcessesEnabled = !Program.Config.ProcessesEnabled;
+                    Log($"Toggled processes to: {Program.Config.ProcessesEnabled}.");
+                    break;
                 default:
-                    await ctx.RespondAsync("Available toggles: `off`, `cam`, `tts`, `screenshot`, `play`.");
+                    await ctx.RespondAsync("Available toggles: `off`, `cam`, `tts`, `screenshot`, `play`, `cursor`, `proc`.");
                     return;
             }
 
@@ -372,7 +490,15 @@ namespace StalkBot
             Config.SaveCfg();
         }
 
-        [Command("blur"), RequireOwner]
+        [Command("timeout"), RequireOwner, Description("Set a timeout for TTS/Playsounds.")]
+        public async Task Timeout(CommandContext ctx, int timeout)
+        {
+            Program.Config.Timeout = timeout;
+            await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+            Config.SaveCfg();
+        }
+
+        [Command("blur"), RequireOwner, Description("Set a blur for your screenshot. Only 0.0 to 5.0 is allowed.")]
         public async Task SetBlur(CommandContext ctx, double amount)
         {
             if (amount > 5 || amount < 0)
@@ -391,13 +517,21 @@ namespace StalkBot
             Config.SaveCfg();
         }
 
-        [Command("timer"), RequireOwner]
+        [Command("timer"), RequireOwner, Description("Sets the time the webcam waits before taking a photo.")]
         public async Task SetTimer(CommandContext ctx, int amount)
         {
             Program.Config.CamTimer = amount;
             await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
             Log($"Cam timer changed to {amount.ToString()}.");
             Config.SaveCfg();
+        }
+
+        private static void PlayAlert(string filename)
+        {
+            if (!File.Exists(filename)) return;
+            var player = new SoundPlayer("screenshot.wav");
+            player.Play();
+            player.Dispose();
         }
 
         private static Task ConvertAudio(string filename)
