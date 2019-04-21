@@ -72,7 +72,7 @@ namespace StalkBot
                 $"PlaySounds: {PlayEnabled.ToString()}\n" +
                 $"Cursor: {CursorEnabled}\n" +
                 $"Processes: {ProcessesEnabled}\n" +
-                $"Timeout: {Timeout.ToString(CultureInfo.InvariantCulture)}" +
+                $"Timeout: {Timeout.ToString(CultureInfo.InvariantCulture)}\n" +
                 $"Folder: {FolderPath}";
         }
 

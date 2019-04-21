@@ -58,7 +58,7 @@ namespace StalkBot
             }
         }
 
-        [Command("cursor"), Description("Either puts the cursor to random locations for a few seconds or to a specified x/y position.")]
+        [Command("cursor"), Description("Either puts the cursor to random locations for a few seconds or to a specified x/y position."),Cooldown(1,5,CooldownBucketType.Global)]
         [SuppressMessage("ReSharper", "PossibleNullReferenceException")]
         public async Task Cursor(CommandContext ctx, int x = 0, int y = 0)
         {
@@ -309,7 +309,13 @@ namespace StalkBot
                         AutoReset = false
                     };
                     timer.Start();
-                    timer.Elapsed += (sender, args) => { synth.Dispose(); };
+                    timer.Elapsed += async (sender, args) =>
+                    {
+                        synth.Dispose();
+                        await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
+                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🛑"));
+                        
+                    };
                     synth.SpeakAsync(p);
                     Program.IsPlaying = true;
                     synth.SpeakCompleted += async (sender, args) =>
@@ -529,7 +535,7 @@ namespace StalkBot
         private static void PlayAlert(string filename)
         {
             if (!File.Exists(filename)) return;
-            var player = new SoundPlayer("screenshot.wav");
+            var player = new SoundPlayer(filename);
             player.Play();
             player.Dispose();
         }
