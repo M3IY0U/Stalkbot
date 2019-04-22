@@ -16,7 +16,6 @@ namespace StalkBot
         public static DiscordClient Client;
         private CommandsNextModule _commands;
         public static Config Config;
-        public static bool IsPlaying;
         public static List<DiscordUser> Blacklist;
 
         public static void Main(string[] args)
@@ -46,7 +45,6 @@ namespace StalkBot
             }
 
             Blacklist = new List<DiscordUser>();
-            IsPlaying = false;
             Client = new DiscordClient(new DiscordConfiguration {Token = Config.Token, TokenType = TokenType.Bot});
             _commands = Client.UseCommandsNext(new CommandsNextConfiguration
                 {StringPrefix = Config.Prefix, CaseSensitive = false});

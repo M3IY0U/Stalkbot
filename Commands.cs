@@ -9,12 +9,14 @@ using System.Media;
 using System.Net;
 using System.Speech.Synthesis;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using AForge.Video.DirectShow;
 using DSharpPlus.CommandsNext;
 using DSharpPlus.CommandsNext.Attributes;
 using DSharpPlus.Entities;
+using NAudio.Wave;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.Processing;
 using Image = SixLabors.ImageSharp.Image;
@@ -53,12 +55,14 @@ namespace StalkBot
             }
             else
             {
-                Log($"Processes requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it not enabled.");
+                Log($"Processes requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was toggled off.");
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
-
-        [Command("cursor"), Description("Either puts the cursor to random locations for a few seconds or to a specified x/y position."),Cooldown(1,5,CooldownBucketType.Global)]
+        
+        [Command("cursor"),
+         Description("Either puts the cursor to random locations for a few seconds or to a specified x/y position."),
+         Cooldown(1, 5, CooldownBucketType.Global)]
         [SuppressMessage("ReSharper", "PossibleNullReferenceException")]
         public async Task Cursor(CommandContext ctx, int x = 0, int y = 0)
         {
@@ -77,7 +81,7 @@ namespace StalkBot
                 {
                     y = 0;
                 }
-                
+
                 PlayAlert("cursor.wav");
                 var pc = new PointConverter();
                 Point pt;
@@ -101,12 +105,13 @@ namespace StalkBot
             }
             else
             {
-                Log($"Cursor requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it not enabled.");
+                Log($"Cursor requested by {ctx.User.Username}#{ctx.User.Discriminator}, but it was toggled off.");
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🔕"));
             }
         }
 
-        [Command("folder"), Cooldown(1, 5, CooldownBucketType.Global), Description("Sends a file from a folder, if set.")]
+        [Command("folder"), Cooldown(1, 5, CooldownBucketType.Global),
+         Description("Sends a file from a folder, if set.")]
         public async Task Folder(CommandContext ctx)
         {
             if (Program.Config.FolderPath != "" && !Program.Blacklist.Contains(ctx.User))
@@ -139,7 +144,8 @@ namespace StalkBot
             }
         }
 
-        [Command("webcam"), Aliases("wc", "cam"), Cooldown(1, 5, CooldownBucketType.Global), Description("Captures the webcam.")]
+        [Command("webcam"), Aliases("wc", "cam"), Cooldown(1, 5, CooldownBucketType.Global),
+         Description("Captures the webcam.")]
         public async Task WebCam(CommandContext ctx)
         {
             if (Program.Config.CamEnabled && !Program.Blacklist.Contains(ctx.User))
@@ -182,17 +188,12 @@ namespace StalkBot
             }
         }
 
-        [Command("play"), Cooldown(1, 5, CooldownBucketType.Global), Description("Plays the attached file or url to a file.")]
+        [Command("play"), Cooldown(1, 5, CooldownBucketType.Global),
+         Description("Plays the attached file or url to a file.")]
         public async Task Play(CommandContext ctx, string url = "")
         {
             if (Program.Config.PlayEnabled && !Program.Blacklist.Contains(ctx.User))
             {
-                if (Program.IsPlaying)
-                {
-                    await ctx.RespondAsync("Already playing something");
-                    return;
-                }
-
                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("♨"));
 
                 try
@@ -247,28 +248,47 @@ namespace StalkBot
                     }
 
                     await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("♨"));
-                    using (var player = new SoundPlayer("temp.wav"))
+
+                    await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("▶"));
+                    var abort = false;
+
+                    using (var audioFile = new AudioFileReader("temp.wav"))
+                    using (var outputDevice = new WaveOutEvent())
                     {
-                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("▶"));
+                        var timer = new Timer
+                        {
+                            Interval = Program.Config.Timeout + 0.0001,
+                            AutoReset = false
+                        };
+                        outputDevice.Init(audioFile);
+                        outputDevice.Play();
+                        outputDevice.PlaybackStopped += async (sender, args) =>
+                        {
+                            timer.Stop();
+                            if (abort) return;
+                            await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("▶"));
+                            await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+                        };
+
                         if (Program.Config.Timeout > 0.0)
                         {
-                            var timer = new Timer
-                            {
-                                Enabled = true,
-                                Interval = Program.Config.Timeout,
-                                AutoReset = false
-                            };
                             timer.Start();
                             timer.Elapsed += async (sender, args) =>
                             {
+                                abort = true;
                                 // ReSharper disable once AccessToDisposedClosure
-                                player.Stop();
+                                outputDevice.Stop();
                                 await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromUnicode("▶"));
                                 await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🛑"));
                             };
                         }
-                        player.Play();
+
+                        while (outputDevice.PlaybackState == PlaybackState.Playing)
+                        {
+                            Thread.Sleep(1000);
+                        }
                     }
+                    
                     File.Delete("temp" + fileType);
                 }
                 catch (Exception e)
@@ -285,17 +305,12 @@ namespace StalkBot
             }
         }
 
-        [Command("say"), Aliases("tts"), Cooldown(1, 5, CooldownBucketType.Global), Description("Tells the user something via text-to-speech.")]
+        [Command("say"), Aliases("tts"), Cooldown(1, 5, CooldownBucketType.Global),
+         Description("Tells the user something via text-to-speech.")]
         public async Task Say(CommandContext ctx, [RemainingText] string input)
         {
             if (Program.Config.TtsEnabled && !Program.Blacklist.Contains(ctx.User))
             {
-                if (Program.IsPlaying)
-                {
-                    await ctx.RespondAsync("Already playing something");
-                    return;
-                }
-
                 try
                 {
                     Log($"TTS requested by {ctx.User.Username}#{ctx.User.Discriminator}. Text: {input}");
@@ -308,23 +323,30 @@ namespace StalkBot
                         Interval = Program.Config.Timeout,
                         AutoReset = false
                     };
-                    timer.Start();
-                    timer.Elapsed += async (sender, args) =>
+                    if (Program.Config.Timeout > 0.0)
                     {
-                        synth.Dispose();
-                        await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
-                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🛑"));
-                        
-                    };
-                    synth.SpeakAsync(p);
-                    Program.IsPlaying = true;
-                    synth.SpeakCompleted += async (sender, args) =>
+                        timer.Start();
+                        timer.Elapsed += async (sender, args) =>
+                        {
+                            synth.Dispose();
+                            await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
+                            await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("🛑"));
+                        };
+                        synth.SpeakAsync(p);
+                        synth.SpeakCompleted += async (sender, args) =>
+                        {
+                            await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
+                            await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+                            synth.Dispose();
+                            timer.Stop();
+                            timer.Dispose();
+                        };
+                    }
+                    else
                     {
-                        await ctx.Message.DeleteOwnReactionAsync(DiscordEmoji.FromName(Program.Client, ":mega:"));
-                        await ctx.Message.CreateReactionAsync(DiscordEmoji.FromUnicode("✅"));
+                        synth.Speak(p);
                         synth.Dispose();
-                        Program.IsPlaying = false;
-                    };
+                    }
                 }
                 catch (Exception e)
                 {
@@ -340,7 +362,8 @@ namespace StalkBot
             }
         }
 
-        [Command("screenshot"), Aliases("ss", "sc"), Cooldown(1, 5, CooldownBucketType.Global), Description("Captures a screenshot.")]
+        [Command("screenshot"), Aliases("ss", "sc"), Cooldown(1, 5, CooldownBucketType.Global),
+         Description("Captures a screenshot.")]
         public async Task Screen(CommandContext ctx)
         {
             if (Program.Config.SsEnabled && !Program.Blacklist.Contains(ctx.User))
@@ -488,7 +511,8 @@ namespace StalkBot
                     Log($"Toggled processes to: {Program.Config.ProcessesEnabled}.");
                     break;
                 default:
-                    await ctx.RespondAsync("Available toggles: `off`, `cam`, `tts`, `screenshot`, `play`, `cursor`, `proc`.");
+                    await ctx.RespondAsync(
+                        "Available toggles: `off`, `cam`, `tts`, `screenshot`, `play`, `cursor`, `proc`.");
                     return;
             }
 
