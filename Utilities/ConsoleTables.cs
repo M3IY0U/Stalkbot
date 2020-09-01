@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 
-namespace StalkBot
+namespace StalkBot.Utilities
 {
     public class ConsoleTable
     {
@@ -235,20 +235,20 @@ namespace StalkBot
             return columnLengths;
         }
 
-        public void Write(Format format = StalkBot.Format.Default)
+        public void Write(Format format = Utilities.Format.Default)
         {
             switch (format)
             {
-                case StalkBot.Format.Default:
+                case Utilities.Format.Default:
                     Console.WriteLine(ToString());
                     break;
-                case StalkBot.Format.MarkDown:
+                case Utilities.Format.MarkDown:
                     Console.WriteLine(ToMarkDownString());
                     break;
-                case StalkBot.Format.Alternative:
+                case Utilities.Format.Alternative:
                     Console.WriteLine(ToStringAlternative());
                     break;
-                case StalkBot.Format.Minimal:
+                case Utilities.Format.Minimal:
                     Console.WriteLine(ToMinimalString());
                     break;
                 default:
