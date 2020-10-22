@@ -72,7 +72,7 @@ namespace StalkBot
                 cfg.Save();
             }
             if (File.Exists("ffmpeg.exe")) return;
-            Logger.Log("ffmpeg.exe not found in directory, please download it from https://ffmpeg.zeranoe.com/builds/",
+            Logger.Log("ffmpeg.exe not found in directory, please download it from https://www.gyan.dev/ffmpeg/builds/",
                 null, LogLevel.Error);
             
             Console.ReadLine();
