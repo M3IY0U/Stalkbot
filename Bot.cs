@@ -33,9 +33,9 @@ namespace StalkBot
                 Token = Config.Token
             });
             var deps = new ServiceCollection();
-            
+
             deps.AddSingleton(General.BuildFolderList());
-            
+
             var prefixes = new List<string> {Config.Prefix};
 
             //setup commands
@@ -72,9 +72,9 @@ namespace StalkBot
                 cfg.Save();
             }
             if (File.Exists("ffmpeg.exe")) return;
-            Logger.Log("ffmpeg.exe not found in directory, please download it from https://ffmpeg.zeranoe.com/builds/",
+            Logger.Log("ffmpeg.exe not found in directory, please download it from https://www.gyan.dev/ffmpeg/builds/",
                 null, LogLevel.Error);
-            
+
             Console.ReadLine();
             Environment.Exit(0);
         }
@@ -92,7 +92,7 @@ namespace StalkBot
             Console.WriteLine("Enter a timeout for the tts/play command (in milliseconds): ");
             cfg.Timeout = Convert.ToDouble(Console.ReadLine());
         }
-        
+
         public async Task RunAsync()
         {
             await Client.ConnectAsync();
